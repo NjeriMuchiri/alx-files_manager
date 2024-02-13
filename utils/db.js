@@ -1,66 +1,62 @@
-import mongodb from 'mongodb';
-// eslint-disable-next-line no-unused-vars
-import Collection from 'mongodb/lib/collection';
-import envLoader from './env_loader';
+import redis from 'redis';
+import { promisify } from 'util';
 
 /**
- * Represents a MongoDB client.
+ * Class for performing operations with Redis service
  */
-class DBClient {
-  /**
-   * Creates a new DBClient instance.
-   */
+class RedisClient {
   constructor() {
-    envLoader();
-    const host = process.env.DB_HOST || 'localhost';
-    const port = process.env.DB_PORT || 27017;
-    const database = process.env.DB_DATABASE || 'files_manager';
-    const dbURL = `mongodb://${host}:${port}/${database}`;
+    this.client = redis.createClient();
+    this.getAsync = promisify(this.client.get).bind(this.client);
 
-    this.client = new mongodb.MongoClient(dbURL, { useUnifiedTopology: true });
-    this.client.connect();
+    this.client.on('error', (error) => {
+      console.log(`Redis client not connected to the server: ${error.message}`);
+    });
+
+    this.client.on('connect', () => {
+      // console.log('Redis client connected to the server');
+    });
   }
 
   /**
-   * Checks if this client's connection to the MongoDB server is active.
-   * @returns {boolean}
+   * Checks if connection to Redis is Alive
+   * @return {boolean} true if connection alive or false if not
    */
   isAlive() {
-    return this.client.isConnected();
+    return this.client.connected;
   }
 
   /**
-   * Retrieves the number of users in the database.
-   * @returns {Promise<Number>}
+   * gets value corresponding to key in redis
+   * @key {string} key to search for in redis
+   * @return {string}  value of key
    */
-  async nbUsers() {
-    return this.client.db().collection('users').countDocuments();
+  async get(key) {
+    const value = await this.getAsync(key);
+    return value;
   }
 
   /**
-   * Retrieves the number of files in the database.
-   * @returns {Promise<Number>}
+   * Creates a new key in redis with a specific TTL
+   * @key {string} key to be saved in redis
+   * @value {string} value to be asigned to key
+   * @duration {number} TTL of key
+   * @return {undefined}  No return
    */
-  async nbFiles() {
-    return this.client.db().collection('files').countDocuments();
+  async set(key, value, duration) {
+    this.client.setex(key, duration, value);
   }
 
   /**
-   * Retrieves a reference to the `users` collection.
-   * @returns {Promise<Collection>}
+   * Deletes key in redis service
+   * @key {string} key to be deleted
+   * @return {undefined}  No return
    */
-  async usersCollection() {
-    return this.client.db().collection('users');
-  }
-
-  /**
-   * Retrieves a reference to the `files` collection.
-   * @returns {Promise<Collection>}
-   */
-  async filesCollection() {
-    return this.client.db().collection('files');
+  async del(key) {
+    this.client.del(key);
   }
 }
 
-export const dbClient = new DBClient();
-export default dbClient;
+const redisClient = new RedisClient();
+
+export default redisClient;
